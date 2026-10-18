@@ -84,16 +84,38 @@ public class UserService extends UserServiceGrpc.UserServiceImplBase {
             responseObserver.onError(Status.NOT_FOUND.withDescription("User not found").asException());
             return;
         }
+
+        User.Builder userBuilder = user.toBuilder();
         if(req.getName() != null && !req.getName().isEmpty()) {
-            user.toBuilder().setName(req.getName()).build();
+            userBuilder.setName(req.getName());
             
         }
         if(req.getEmail() != null && !req.getEmail().isEmpty()) {
-            user.toBuilder().setEmail(req.getEmail()).build();
+            userBuilder.setEmail(req.getEmail());
         }
-        users.put(userId,user);
+        User updatedUser= userBuilder.build();
+        users.put(userId,updatedUser);
 
         UpdateUserResponse res= UpdateUserResponse.newBuilder().setUser(user).build();
+        responseObserver.onNext(res);
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void deleteUser(DeleteUserRequest req, StreamObserver<DeleteUserResponse> responseObserver){
+        if(req.getId() == null || req.getId().isEmpty()) {
+            responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("User ID is required").asException());
+            return;
+        }
+        String userId = req.getId();
+        User user= users.get(userId);
+        if(user==null){
+            responseObserver.onError(Status.NOT_FOUND.withDescription("User not found").asException());
+            return;
+        }
+
+        boolean success = users.remove(userId) != null;
+        DeleteUserResponse res= DeleteUserResponse.newBuilder().setSuccess(success).build();
         responseObserver.onNext(res);
         responseObserver.onCompleted();
     }
