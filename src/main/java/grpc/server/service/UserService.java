@@ -16,7 +16,6 @@ public class UserService extends UserServiceGrpc.UserServiceImplBase {
     @Override
     public void createUser(CreateUserRequest req, StreamObserver<CreateUserResponse> responseObserver) {
 
-        // TODO: Add status for validation
         if(req.getName() == null || req.getName().isEmpty()) {
             responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("Name is required").asException());
             return;
@@ -69,6 +68,32 @@ public class UserService extends UserServiceGrpc.UserServiceImplBase {
             return;
         }
         ListUsersResponse res= ListUsersResponse.newBuilder().addAllUsers(users.values()).build();
+        responseObserver.onNext(res);
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void updateUser(UpdateUserRequest req, StreamObserver<UpdateUserResponse> responseObserver){
+        if(req.getId() == null || req.getId().isEmpty()) {
+            responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("User ID is required").asException());
+            return;
+        }
+        String userId = req.getId();
+        User user= users.get(userId);
+        if(user==null){
+            responseObserver.onError(Status.NOT_FOUND.withDescription("User not found").asException());
+            return;
+        }
+        if(req.getName() != null && !req.getName().isEmpty()) {
+            user.toBuilder().setName(req.getName()).build();
+            
+        }
+        if(req.getEmail() != null && !req.getEmail().isEmpty()) {
+            user.toBuilder().setEmail(req.getEmail()).build();
+        }
+        users.put(userId,user);
+
+        UpdateUserResponse res= UpdateUserResponse.newBuilder().setUser(user).build();
         responseObserver.onNext(res);
         responseObserver.onCompleted();
     }
