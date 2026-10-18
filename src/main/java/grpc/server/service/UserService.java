@@ -5,8 +5,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import io.grpc.stub.StreamObserver;
+import io.grpc.Status;
 import net.devh.boot.grpc.server.service.GrpcService;
-// import grpc.server.proto.*;
 import grpc.server.proto.*;
 
 @GrpcService
@@ -18,10 +18,14 @@ public class UserService extends UserServiceGrpc.UserServiceImplBase {
     public void createUser(CreateUserRequest req, StreamObserver<CreateUserResponse> responseObserver) {
 
         // TODO: Add status for validation
-        // if(req.getName() == null || req.getEmail() == null) {
-        //     responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("Name and email are required").asException());
-        //     return;
-        // }
+        if(req.getName() == null || req.getName().isEmpty()) {
+            responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("Name is required").asException());
+            return;
+        }
+        if(req.getEmail() == null || req.getEmail().isEmpty()) {
+            responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("Email is required").asException());
+            return;
+        }
         System.out.println("Creating user: " + req.getName());
 
         User user = User.newBuilder()
@@ -36,6 +40,25 @@ public class UserService extends UserServiceGrpc.UserServiceImplBase {
             .setUser(user)
             .build();
 
+        responseObserver.onNext(res);
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void getUser(GetUserRequest req, StreamObserver<GetUserResponse> responseObserver) {
+        if(req.getId() == null || req.getId().isEmpty()) {
+            responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("User ID is required").asException());
+            return;
+        }
+        String userId = req.getId();
+        User user= users.get(userId);
+
+        if(user==null){
+            responseObserver.onError(Status.NOT_FOUND.withDescription("User not found").asException());
+            return;
+        }
+
+        GetUserResponse res= GetUserResponse.newBuilder().setUser(user).build();
         responseObserver.onNext(res);
         responseObserver.onCompleted();
     }
