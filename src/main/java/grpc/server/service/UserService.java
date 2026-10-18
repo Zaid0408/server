@@ -1,7 +1,6 @@
 package grpc.server.service;
 
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import io.grpc.stub.StreamObserver;
@@ -59,6 +58,17 @@ public class UserService extends UserServiceGrpc.UserServiceImplBase {
         }
 
         GetUserResponse res= GetUserResponse.newBuilder().setUser(user).build();
+        responseObserver.onNext(res);
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void listUsers(ListUsersRequest req, StreamObserver<ListUsersResponse> responseObserver) {
+        if(users.isEmpty()){
+            responseObserver.onError(Status.NOT_FOUND.withDescription("No users found").asException());
+            return;
+        }
+        ListUsersResponse res= ListUsersResponse.newBuilder().addAllUsers(users.values()).build();
         responseObserver.onNext(res);
         responseObserver.onCompleted();
     }
