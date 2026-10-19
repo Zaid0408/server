@@ -3,15 +3,20 @@ package grpc.server.service;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import io.grpc.stub.StreamObserver;
 import io.grpc.Status;
 import net.devh.boot.grpc.server.service.GrpcService;
 import grpc.server.proto.*;
 
+import grpc.server.utils.EmailValidator;
+
 @GrpcService
 public class UserService extends UserServiceGrpc.UserServiceImplBase {
     // In-memory storage (simulates database)
     private final Map<String, User> users = new ConcurrentHashMap<>();
+    private final Logger log = LoggerFactory.getLogger(UserService.class);
 
     @Override
     public void createUser(CreateUserRequest req, StreamObserver<CreateUserResponse> responseObserver) {
@@ -24,7 +29,11 @@ public class UserService extends UserServiceGrpc.UserServiceImplBase {
             responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("Email is required").asException());
             return;
         }
-        System.out.println("CreateUser RPC hit for name: " + req.getName());
+        if (!EmailValidator.isValid(req.getEmail())) {
+            responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("Email is invalid").asException());
+            return;
+        }
+        log.info("CreateUser RPC hit for name: " + req.getName());
 
         User user = User.newBuilder()
             .setId(UUID.randomUUID().toString())
@@ -33,7 +42,7 @@ public class UserService extends UserServiceGrpc.UserServiceImplBase {
             .build();
 
         users.put(user.getId(),user);
-        System.out.println("CreateUser created user id: " + user.getId());
+        log.info("CreateUser created user id: " + user.getId());
 
         CreateUserResponse res= CreateUserResponse.newBuilder()
             .setUser(user)
@@ -50,7 +59,7 @@ public class UserService extends UserServiceGrpc.UserServiceImplBase {
             return;
         }
         String userId = req.getId();
-        System.out.println("GetUser RPC hit for user id: " + userId);
+        log.info("GetUser RPC hit for user id: " + userId);
         User user= users.get(userId);
 
         if(user==null){
@@ -69,7 +78,7 @@ public class UserService extends UserServiceGrpc.UserServiceImplBase {
             responseObserver.onError(Status.NOT_FOUND.withDescription("No users found").asException());
             return;
         }
-        System.out.println("ListUsers RPC hit, user count: " + users.size());
+        log.info("ListUsers RPC hit, user count: " + users.size());
         ListUsersResponse res= ListUsersResponse.newBuilder().addAllUsers(users.values()).build();
         responseObserver.onNext(res);
         responseObserver.onCompleted();
@@ -81,8 +90,12 @@ public class UserService extends UserServiceGrpc.UserServiceImplBase {
             responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("User ID is required").asException());
             return;
         }
+        if (req.getEmail() != null && !req.getEmail().isEmpty() && !EmailValidator.isValid(req.getEmail())) {
+            responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("Email is invalid").asException());
+            return;
+        }
         String userId = req.getId();
-        System.out.println("UpdateUser RPC hit for user id: " + userId);
+        log.info("UpdateUser RPC hit for user id: " + userId);
         User user= users.get(userId);
         if(user==null){
             responseObserver.onError(Status.NOT_FOUND.withDescription("User not found").asException());
@@ -100,7 +113,7 @@ public class UserService extends UserServiceGrpc.UserServiceImplBase {
         User updatedUser= userBuilder.build();
         users.put(userId,updatedUser);
 
-        UpdateUserResponse res= UpdateUserResponse.newBuilder().setUser(user).build();
+        UpdateUserResponse res= UpdateUserResponse.newBuilder().setUser(updatedUser).build();
         responseObserver.onNext(res);
         responseObserver.onCompleted();
     }
@@ -112,7 +125,7 @@ public class UserService extends UserServiceGrpc.UserServiceImplBase {
             return;
         }
         String userId = req.getId();
-        System.out.println("DeleteUser RPC hit for user id: " + userId);
+        log.info("DeleteUser RPC hit for user id: " + userId);
         User user= users.get(userId);
         if(user==null){
             responseObserver.onError(Status.NOT_FOUND.withDescription("User not found").asException());
