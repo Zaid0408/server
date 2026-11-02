@@ -1,6 +1,7 @@
 package grpc.server.service;
 
 import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
@@ -17,6 +18,7 @@ public class UserService extends UserServiceGrpc.UserServiceImplBase {
     // In-memory storage (simulates database)
     private final Map<String, User> users = new ConcurrentHashMap<>();
     private final Logger log = LoggerFactory.getLogger(UserService.class);
+    private final Map<String, List<StreamObserver<WatchUserResponse>>> watchers = new ConcurrentHashMap<>();
 
     @Override
     public void createUser(CreateUserRequest req, StreamObserver<CreateUserResponse> responseObserver) {
@@ -43,6 +45,8 @@ public class UserService extends UserServiceGrpc.UserServiceImplBase {
 
         users.put(user.getId(),user);
         log.info("CreateUser created user id: " + user.getId());
+        notifyWatchers(user.getId(), user, UserEventType.CREATED);
+
 
         CreateUserResponse res= CreateUserResponse.newBuilder()
             .setUser(user)
@@ -112,6 +116,7 @@ public class UserService extends UserServiceGrpc.UserServiceImplBase {
         }
         User updatedUser= userBuilder.build();
         users.put(userId,updatedUser);
+        notifyWatchers(userId, updatedUser, UserEventType.UPDATED);
 
         UpdateUserResponse res= UpdateUserResponse.newBuilder().setUser(updatedUser).build();
         responseObserver.onNext(res);
@@ -133,8 +138,43 @@ public class UserService extends UserServiceGrpc.UserServiceImplBase {
         }
 
         boolean success = users.remove(userId) != null;
+        notifyWatchers(userId, user, UserEventType.DELETED);
         DeleteUserResponse res= DeleteUserResponse.newBuilder().setSuccess(success).build();
         responseObserver.onNext(res);
         responseObserver.onCompleted();
+    }
+
+    @Override
+    public void watchUser(WatchUserRequest req, StreamObserver<WatchUserResponse> responseObserver) {
+        String userId = req.getId();
+
+        if (userId.isEmpty()) {
+            responseObserver.onError(Status.INVALID_ARGUMENT
+                    .withDescription("User ID is required")
+                    .asException());
+            return;
+        }
+
+        if (!users.containsKey(userId)) {
+            responseObserver.onError(Status.NOT_FOUND
+                    .withDescription("User not found")
+                    .asException());
+            return;
+        }
+        watchers.computeIfAbsent(userId, id -> new CopyOnWriteArrayList<>()).add(responseObserver);
+
+        log.info("WatchUser stream started for user id: {}", userId);
+    }
+    private void notifyWatchers(String userId, User user, UserEventType eventType) {
+        WatchUserResponse event = WatchUserResponse.newBuilder()
+                .setUser(user)
+                .setEventType(eventType)
+                .build();
+    
+        List<StreamObserver<WatchUserResponse>> userWatchers = watchers.get(userId);
+    
+        if (userWatchers != null) {
+            userWatchers.forEach(observer -> observer.onNext(event));
+        }
     }
 }
