@@ -1,9 +1,13 @@
 package grpc.server.client;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
 import grpc.server.proto.*;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
+import io.grpc.stub.StreamObserver;
 
 public class UserClient {
     
@@ -15,6 +19,7 @@ public class UserClient {
                 .build();
         
         UserServiceGrpc.UserServiceBlockingStub stub = UserServiceGrpc.newBlockingStub(channel);
+        UserServiceGrpc.UserServiceStub asyncStub = UserServiceGrpc.newStub(channel);
         
         try {
             // Test 1: Create Users
@@ -53,9 +58,35 @@ public class UserClient {
             listResponse.getUsersList().forEach(user -> 
                 System.out.println("  - " + user.getName() + " (" + user.getEmail() + ")")
             );
+
+            // Start the stream before the changes. It stays open and prints each event.
+            System.out.println("\n=== Test 4: Watching User ===");
+            CountDownLatch watchEvents = new CountDownLatch(2);
+            asyncStub.watchUser(
+                WatchUserRequest.newBuilder().setId(userId).build(),
+                new StreamObserver<WatchUserResponse>() {
+                    @Override
+                    public void onNext(WatchUserResponse event) {
+                        System.out.println("✓ Watch event: " + event.getEventType()
+                                + " for " + event.getUser().getName());
+                        watchEvents.countDown();
+                    }
+
+                    @Override
+                    public void onError(Throwable t) {
+                        System.err.println("❌ Watch error: " + t.getMessage());
+                    }
+
+                    @Override
+                    public void onCompleted() {
+                        System.out.println("✓ Watch stream closed");
+                    }
+                }
+            );
+            Thread.sleep(300);
             
-            // Test 4: Update User
-            System.out.println("\n=== Test 4: Updating User ===");
+            // Test 5: Update User
+            System.out.println("\n=== Test 5: Updating User ===");
             UpdateUserResponse updateResponse = stub.updateUser(
                 UpdateUserRequest.newBuilder()
                     .setId(userId)
@@ -65,22 +96,26 @@ public class UserClient {
             );
             System.out.println("✓ Updated: " + updateResponse.getUser().getName());
             
-            // Test 5: Verify Update
-            System.out.println("\n=== Test 5: Verifying Update ===");
+            // Test 6: Verify Update
+            System.out.println("\n=== Test 6: Verifying Update ===");
             GetUserResponse verifyResponse = stub.getUser(
                 GetUserRequest.newBuilder().setId(userId).build()
             );
             System.out.println("✓ Verified: " + verifyResponse.getUser().getName() + " - " + verifyResponse.getUser().getEmail());
             
-            // Test 6: Delete User
-            System.out.println("\n=== Test 6: Deleting User ===");
+            // Test 7: Delete User
+            System.out.println("\n=== Test 7: Deleting User ===");
             DeleteUserResponse deleteResponse = stub.deleteUser(
                 DeleteUserRequest.newBuilder().setId(userId).build()
             );
             System.out.println("✓ Deleted: " + deleteResponse.getSuccess());
+
+            if (!watchEvents.await(5, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Timed out waiting for watch events");
+            }
             
-            // Test 7: Verify Deletion
-            System.out.println("\n=== Test 7: Verifying Deletion ===");
+            // Test 8: Verify Deletion
+            System.out.println("\n=== Test 8: Verifying Deletion ===");
             try {
                 stub.getUser(GetUserRequest.newBuilder().setId(userId).build());
                 System.out.println("✗ User should not exist!");
@@ -88,8 +123,8 @@ public class UserClient {
                 System.out.println("✓ User not found (expected): " + e.getStatus().getDescription());
             }
             
-            // Test 8: Error Handling
-            System.out.println("\n=== Test 8: Testing Validation ===");
+            // Test 9: Error Handling
+            System.out.println("\n=== Test 9: Testing Validation ===");
             try {
                 stub.createUser(
                     CreateUserRequest.newBuilder()
