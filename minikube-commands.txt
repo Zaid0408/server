@@ -1,0 +1,103 @@
+Minikube and kubectl commands for this project
+=============================================
+
+Run every command from the project root (the folder that contains the Dockerfile and the k8s/ directory).
+
+This Minikube cluster uses containerd. Do not use "eval $(minikube docker-env)" and then "docker build".
+That points Docker at Minikube, and on this cluster the build fails with "404 page not found".
+"minikube image build" builds the image inside the Minikube node, so the Pod can see it.
+
+
+1. First time
+------------
+
+minikube start
+minikube image build -t grpc-server:latest .
+kubectl apply -f k8s/
+kubectl get pods
+
+Wait until the Pod shows READY 1/1 and STATUS Running.
+The Deployment name is grpc-server-deployment.
+The Service name is grpc-server-service.
+The container image is grpc-server:latest with imagePullPolicy IfNotPresent.
+
+
+2. Open the NodePort on your Mac and run the client
+---------------------------------------------------
+
+On a Mac, the Minikube IP (minikube ip, for example 192.168.49.2) is inside Docker.
+The laptop cannot connect to 192.168.49.2:<nodePort>. The connection times out.
+
+Leave this command running in its own terminal. It forwards a localhost port to the NodePort:
+
+minikube service grpc-server-service --url
+
+It prints a line like:
+
+http://127.0.0.1:52955
+
+In src/main/resources/application.properties set:
+
+minikube.server.enabled=true
+minikube.server.host=127.0.0.1
+minikube.server.port=52955
+
+Use the port from the printed line. That port changes every time you start the command again.
+
+Then, in a second terminal:
+
+./mvnw exec:java -Dexec.mainClass="grpc.server.client.UserClient"
+
+To call a server started with ./mvnw spring-boot:run instead, set minikube.server.enabled=false.
+The client then uses grpc.server.host and grpc.server.port (localhost:9090).
+
+
+3. Cluster already exists
+-------------------------
+
+See whether Minikube is running:
+
+minikube status
+
+If the host says Stopped:
+
+minikube start
+
+Rebuild the image inside Minikube after code or Dockerfile changes, then restart the Pod:
+
+minikube image build -t grpc-server:latest .
+kubectl rollout restart deployment grpc-server-deployment
+kubectl get pods
+
+If the Deployment and Service are missing (kubectl get pods shows nothing):
+
+kubectl apply -f k8s/
+kubectl get pods
+
+Start the tunnel again, and put the new port into minikube.server.port:
+
+minikube service grpc-server-service --url
+
+Check the Service and the assigned NodePort:
+
+kubectl get svc grpc-server-service
+minikube ip
+
+
+4. Stop
+-------
+
+In the terminal where "minikube service grpc-server-service --url" is running, press Ctrl+C.
+
+Remove the Deployment and the Service. Deleting only the Pod is not enough, because the Deployment creates a new one:
+
+kubectl delete -f k8s/
+kubectl get pods
+
+Stop the cluster. The cluster is kept and "minikube start" brings it back:
+
+minikube stop
+
+Remove the cluster completely:
+
+minikube delete

@@ -1,5 +1,7 @@
 package grpc.server.client;
 
+import java.io.InputStream;
+import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -11,10 +13,21 @@ import io.grpc.stub.StreamObserver;
 
 public class UserClient {
     
-    public static void main(String[] args) {
-        // Create channel
+    public static void main(String[] args) throws Exception {
+        Properties properties = new Properties();
+        try (InputStream input = UserClient.class.getClassLoader().getResourceAsStream("application.properties")) {
+            properties.load(input);
+        }
+
+        boolean minikube = Boolean.parseBoolean(properties.getProperty("minikube.server.enabled"));
+        System.out.println("Minikube Connection enabled: " + minikube);
+        String host = minikube ? properties.getProperty("minikube.server.host"): properties.getProperty("grpc.server.host");
+
+        int port = Integer.parseInt(minikube ? properties.getProperty("minikube.server.port"): properties.getProperty("grpc.server.port"));
+        System.out.println("Connecting to " + host + ":" + port);
+
         ManagedChannel channel = ManagedChannelBuilder
-                .forAddress("localhost", 9090)
+                .forAddress(host, port)
                 .usePlaintext()
                 .build();
         
